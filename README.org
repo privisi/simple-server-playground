@@ -1,0 +1,19 @@
+* Simple Server
+
+A toy repository to demonstrate important concepts in building
+an HTTP api service in clojure.
+
+* Usage
+
+  #+begin_src shell
+lein repl  
+  #+end_src
+
+Should start a server listening on [[http://localhost:3001]]
+
+By moving from git tag to git tag, you should see the evolution
+of the code.
+
+** Tags
+
+ - starting-point
