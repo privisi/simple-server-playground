@@ -20,3 +20,4 @@ of the code.
  - request-methods
  - manual-dispatching
  - compojure-routing
+ - http-ring-responses

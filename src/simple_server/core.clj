@@ -2,97 +2,67 @@
   (:require [clojure.pprint]
             [ring.adapter.jetty :refer [run-jetty]]
 
+            [ring.util.response :refer [response created redirect not-found status]]
             [compojure.core :refer [GET POST ANY defroutes]]
+
             [ring.mock.request :as mock]))
 
 
-;;; Routing
+;;; Responses
 ;;;
-;; The process of associating handlers with urls (and
-;; other request parameters) is called ROUTING.
+;; Now that we've got some sensible routing going on,
+;; let's look at our responses for a minute.
 ;;
-;; The most popular tool for doing this in clojure with Ring is COMPOJURE.
-;; Let's re-implement our game using compojure.
-;;
+;; We have a lot of code which returns maps which look like this:
+{:status 200
+ :headers {"Content-Type" "text/plain"}
+ :body "OK- start guessing at /guess"}
 
+;; ring.util.response provides some handy shortcuts for creating these maps; e.g.
 
-(defn no-such-uri-response []
- {:status 404
-  :headers {"Content-Type" "text/plain"}
-  :body "Sorry, No such URI on this server!"})
+;; The standard, everything was OK type response:
+(response "Here is some text.")
+
+;; 404 not found:
+(not-found "Oops!")
+
+;; With this in mind, let's rewrite some of our handlers.
+;; Also, now that we understand that they ARE "handlers",
+;; we'll rename them:
 
 (def game-in-progress (atom nil))
 
-(defn new-game-response []
+(defn new-game-handler []
   ;; Make our new game:
   (reset! game-in-progress (+ 1 (rand-int 10)))
-  {:status 200
-   :headers {"Content-Type" "text/plain"}
-   :body "OK- start guessing at /guess"})
+  (response "OK- start guessing at /guess"))
 
 (defn extract-guess [qs]
   (and qs
        (Long. (second (clojure.string/split qs #"=")))))
 
-(defn guess-response [request]
+(defn guess-handler [request]
   (if-let [guess (extract-guess (:query-string request))]
     (cond
       (= guess @game-in-progress)
       (and (reset! game-in-progress (+ 1 (rand-int 10)))
-           {:status 200
-            :headers {"Content-Type" "text/plain"}
-            :body "Congratulations! You win!"})
+           (response  "Congratulations! You win!"))
 
       (< guess @game-in-progress)
-      {:status 200
-       :headers {"Content-Type" "text/plain"}
-       :body "Too low."}
+      (response "Too low.")
 
       (> guess @game-in-progress)
-      {:status 200
-       :headers {"Content-Type" "text/plain"}
-       :body "Too high."})
-    {:status 400                        ; Bad request
-     :headers {"Content-Type" "text/plain"}
-     :body "You need to supply a guess with /guess?guess=N"}))
+      (response  "Too high."))
 
-
-;;; What does GET do?  It defines a new function, of a request, like so:
-((GET "/new-game" [] "foo")
- {:ssl-client-cert nil,
-  :protocol "HTTP/1.1",
-  :remote-addr "127.0.0.1",
-  :headers {"user-agent" "curl/7.64.0", "accept" "*/*", "host" "localhost:3001"},
-  :server-port 3001,
-  :content-length nil,
-  :content-type nil,
-  :character-encoding nil,
-  :uri "/new-game",
-  :server-name "localhost",
-  :query-string nil,
-  :scheme :http,
-  :request-method :get})
-
-;;; Creating these requests is tiresome, so there is a utility library
-;;; often used in testing, RING.MOCK.
-
-(mock/request :get "/new-game")
-
-;; Now we can write this more simply, like so:
-((GET "/new-game" [] "foo") (mock/request :get "/new-game"))
-
-;; Note that our function discrimitates on both the uri and the request-method:
-((GET "/new-game" [] "foo") (mock/request :get "/unknown"))
-
-((GET "/new-game" [] "foo") (mock/request :post "/new-game"))
-
-
-;;; Now let us look at ROUTING
+    ;; Notice, there is no helper for a 400 response, but we can
+    ;; easily create one like this:
+    (-> (response  "You need to supply a guess with /guess?guess=N")
+        (status 400))))
 
 (defroutes game-routes
-  (GET "/new-game" [] (new-game-response))  ; Why does one have it wrapped in (), 
-  (GET "/guess"    [] guess-response)       ; and this one doesn't?
-  (ANY "*"         [] (no-such-uri-response)))      ; Our catch all, if nothing matches.
+  (GET "/new-game" [] (new-game-handler))  ; Why does one have it wrapped in (),
+  (GET "/guess"    [] guess-handler)       ; and this one doesn't?
+  (ANY "*"         [] (not-found "Sorry, No such URI on this server!")))      ; Our catch all, if nothing matches.
 
 (game-routes  (mock/request :get "/new-game"))
 (game-routes  (mock/request :get "/guess?guess=3"))
