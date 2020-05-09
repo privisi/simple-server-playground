@@ -1,23 +1,20 @@
 (ns simple-server.core
-  (:require [clojure.pprint])
-  (:require [ring.adapter.jetty :refer [run-jetty]]))
+  (:require [clojure.pprint]
+            [ring.adapter.jetty :refer [run-jetty]]
+
+            [compojure.core :refer [GET POST ANY defroutes]]
+            [ring.mock.request :as mock]))
 
 
-;;; URLs
+;;; Routing
 ;;;
-;; In a shell, run this command:
-;; curl -v  http://localhost:3001/some/long/path.html
-;; We see that we now get this in our request map:
+;; The process of associating handlers with urls (and
+;; other request parameters) is called ROUTING.
 ;;
-;;  :uri "/some/long/path.html"
+;; The most popular tool for doing this in clojure with Ring is COMPOJURE.
+;; Let's re-implement our game using compojure.
 ;;
 
-;; So we can start thinking about how to organize our application
-;; based on what urls are being asked for.
-;;
-;; Let's write a simple game, called "What number am I thinking?"
-;; Computer will think of a number between 1 and 10, and we have to guess
-;; what number it is.
 
 (defn no-such-uri-response []
  {:status 404
@@ -60,12 +57,48 @@
      :body "You need to supply a guess with /guess?guess=N"}))
 
 
-(defn handler [request]
-  (condp = (:uri request)
-    "/new-game"  (new-game-response)
-    "/guess"     (guess-response request)
-    (no-such-uri-response)))
+;;; What does GET do?  It defines a new function, of a request, like so:
+((GET "/new-game" [] "foo")
+ {:ssl-client-cert nil,
+  :protocol "HTTP/1.1",
+  :remote-addr "127.0.0.1",
+  :headers {"user-agent" "curl/7.64.0", "accept" "*/*", "host" "localhost:3001"},
+  :server-port 3001,
+  :content-length nil,
+  :content-type nil,
+  :character-encoding nil,
+  :uri "/new-game",
+  :server-name "localhost",
+  :query-string nil,
+  :scheme :http,
+  :request-method :get})
 
+;;; Creating these requests is tiresome, so there is a utility library
+;;; often used in testing, RING.MOCK.
+
+(mock/request :get "/new-game")
+
+;; Now we can write this more simply, like so:
+((GET "/new-game" [] "foo") (mock/request :get "/new-game"))
+
+;; Note that our function discrimitates on both the uri and the request-method:
+((GET "/new-game" [] "foo") (mock/request :get "/unknown"))
+
+((GET "/new-game" [] "foo") (mock/request :post "/new-game"))
+
+
+;;; Now let us look at ROUTING
+
+(defroutes game-routes
+  (GET "/new-game" [] (new-game-response))  ; Why does one have it wrapped in (), 
+  (GET "/guess"    [] guess-response)       ; and this one doesn't?
+  (ANY "*"         [] (no-such-uri-response)))      ; Our catch all, if nothing matches.
+
+(game-routes  (mock/request :get "/new-game"))
+(game-routes  (mock/request :get "/guess?guess=3"))
+(game-routes  (mock/request :get "/dunno"))
+
+(def handler game-routes)
 
 (defonce server
   (run-jetty #'handler {:port 3001 :join? false}))

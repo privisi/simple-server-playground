@@ -19,3 +19,4 @@ of the code.
  - starting-point
  - request-methods
  - manual-dispatching
+ - compojure-routing
