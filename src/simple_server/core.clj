@@ -4,6 +4,7 @@
 
             [ring.util.response :refer [response created redirect not-found status]]
             [compojure.core :refer [GET POST ANY defroutes]]
+            [ring.middleware.defaults :as middleware]
 
             [ring.mock.request :as mock]))
 
@@ -80,12 +81,103 @@
 ;; It would be nice if we could get the data from the query string
 ;; or post data in a similar way, i.e. write:
 
+
+;; Remember, we were trying to get this to work:
+
 ((GET "/foo" [name] {:status 200 :body (str "The name is: " name)})
  (mock/request :get "/foo?name=Bob"))
 
-;; To get this to work, we need to discuss /middlewares/.
+
+;; Look at this:
+((middleware/wrap-defaults (GET "/foo" [name] {:status 200 :body (str "The name is: " name)}) middleware/api-defaults)
+ (mock/request :get "/foo?name=Bob"))
+
+;; Whoa!  It works!  Hard to read though.  What's really going on here?
+
+(def example-route (GET "/foo" [name] {:status 200 :body (str "The name is: " name)}))
+
+(def wrapped-example-route (-> example-route
+                               (middleware/wrap-defaults middleware/api-defaults)))
+
+(wrapped-example-route (mock/request :get "/foo?name=Bob"))
+
+;; This is an instance of a very common pattern in functional programming style;
+;; adapting, or WRAPPING, one function with another.
+;; This way, some code gets to run /in the middle/ between your code and the
+;; external world, so we call this "middle"-ware.
+
+;; To understand this, let's write some simple middlewares of our own.
+
+;; All handlers have this form:
+
+(defn some-handler [request]
+  ;; ....
+  {:status 200
+   :headers {}
+   :body "Some response body"})
+
+;; i.e. a handler is a function which transforms a REQUEST into a RESPONSE.
+
+;; Suppose we wanted to always add a custom header to every outgoing response,
+;; for example, this often used response header, which controls caching on
+;; browsers and proxies:
+
+(-> (some-handler (mock/request :get "/foobar"))
+    (assoc-in [:headers "Cache-Control"] "max-age=3600"))
+
+;; It'd be a real pain to have to modify each one of our handlers to do this.
+;; Consider this function:
+
+(defn cache-control-middleware [handler]
+  (fn [request]
+    (println "Running the cache-control-middleware")
+    (-> (handler request)
+        (assoc-in [:headers "Cache-Control"] "max-age=3600"))))
+
+;; This is a middleware (higher order) function: It accepts a handler FUNCTION,
+;; and returns a MODIFIED handler function, which calls the original handler,
+;; and performs some extra work on the response returned by the original handler.
+
+;; I call these "outbound" middlewares, because they modify the result of the original
+;; handler.
+
+;; Here is another example:
+(defn parse-cookies [request] "some dummy cookie.")
+
+(defn cookie-parsing-middleware [handler]
+  (fn [request]
+    (println "Running the cookie-parsing-middleware")
+    (handler (-> request
+                 (assoc :cookies (parse-cookies request))))))
+
+;; This makes available to the original handler a new field, :cookies
+;; which it can use if it needs to to compute its response.  All together, we have:
+
+(def some-wrapped-handler
+  (-> (ANY "*" [] (fn [request]
+                    (response (str "Responding, having seen: " (:cookies request)))))
+      (cache-control-middleware)
+      (cookie-parsing-middleware)))
+
+(some-wrapped-handler (mock/request :get "/foobar"))
+;; Note the order in which the middlewares ran!
+;;
+;; In this case order doesn't matter, but sometimes, one middleware may depend
+;; on context established by another one, so it's good to remember that
+;; they run "last one first".
 
 
+;; So now we understand our original code (rewritten slightly):
+;; The (middleware/wrap-defaults  middleware/api-defaults) wraps
+;; the incoming request, parsing the query string so that the GET
+;; handler knows to bind `name` from the query string, if present.
+
+((-> (GET "/foo" [name] {:status 200 :body (str "The name is: " name)})
+     (middleware/wrap-defaults  middleware/api-defaults))
+ (mock/request :get "/foo?name=Bob"))
+
+
+;;;; Nothing changed below.
 
 (def game-in-progress (atom nil))
 

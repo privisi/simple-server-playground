@@ -22,3 +22,4 @@ of the code.
  - compojure-routing
  - http-ring-responses
  - destructuring-routes
+ - understanding-middlewares
