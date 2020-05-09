@@ -21,3 +21,4 @@ of the code.
  - manual-dispatching
  - compojure-routing
  - http-ring-responses
+ - destructuring-routes
