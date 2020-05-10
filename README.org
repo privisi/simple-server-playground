@@ -23,3 +23,4 @@ of the code.
  - http-ring-responses
  - destructuring-routes
  - understanding-middlewares
+ - using-middleware-and-destructured-routes
