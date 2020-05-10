@@ -7,36 +7,24 @@
             [compojure.coercions :refer [as-int]]
             [ring.middleware.defaults :as middleware]
 
-            [ring.mock.request :as mock]))
+            [ring.mock.request :as mock]
+            [simple-server.simple-game :as game]))
 
-
-;;; Let's rewrite our game a bit more neatly
-;;; with proper destructuring and middlewares.
-
-(def game-in-progress (atom nil))
+;;; Finally, let us truly separate concerns between our "application code"
+;;; and our "http code".  Our game now lives in its own namespace, and
+;;; is fully testable independent of our "presentation layer".
 
 (defn new-game-handler []
-  ;; Make our new game:
-  (reset! game-in-progress (+ 1 (rand-int 10)))
-  (response "OK- start guessing at /guess"))
+  (when (game/new-game!)
+    (response "OK- start guessing at /guess")))
 
 (defn guess-handler [guess]
-  (cond
-    (nil? guess)
-    ;; Notice, there is no helper for a 400 response, but we can
-    ;; easily create one like this:
-    (-> (response  "You need to supply a guess with /guess?guess=N")
-        (status 400))
-
-    (= guess @game-in-progress)
-    (and (reset! game-in-progress (+ 1 (rand-int 10)))
-         (response  "Congratulations! You win!"))
-
-    (< guess @game-in-progress)
-    (response "Too low.")
-
-    (> guess @game-in-progress)
-    (response  "Too high.")))
+  (condp = (game/guess-answer guess)
+    nil       (-> (response  "You need to supply a guess with /guess?guess=N")
+                  (status 400))
+    :game-over (response  "Congratulations! You win!")
+    :too-low   (response "Too low.")
+    :too-high  (response  "Too high.")))
 
 (defroutes game-routes
   (GET "/new-game" []                 (new-game-handler))

@@ -24,3 +24,4 @@ of the code.
  - destructuring-routes
  - understanding-middlewares
  - using-middleware-and-destructured-routes
+ - separation-of-concerns
