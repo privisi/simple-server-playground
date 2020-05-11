@@ -1,23 +1,33 @@
 (ns simple-server.simple-game)
 
 
-(def game-in-progress (atom nil))
+(def games-in-progress (atom {}))
+(def guesses (atom {}))
 
-(defn new-game! []
+(defn new-game! [account]
   ;; Make our new game:
-  (reset! game-in-progress (+ 1 (rand-int 10)))
+  (swap! games-in-progress assoc account (+ 1 (rand-int 10)))
+  (swap! guesses assoc account 0)
   :ok)
 
-(defn guess-answer [guess]
+(defn guess-answer [account guess]
   (cond
     (nil? guess) nil
 
-    (= guess @game-in-progress)
-    (and (reset! game-in-progress (+ 1 (rand-int 10)))
-         :game-over)
+    (= guess (@games-in-progress account))
+    (do (swap! games-in-progress assoc account (+ 1 (rand-int 10)))
+        (swap! guesses assoc account 0)
+        :win)
+    
+    (>= (@guesses account) 4)
+    (do (swap! games-in-progress assoc account (+ 1 (rand-int 10)))
+        (swap! guesses assoc account 0)
+        :lose)
 
-    (< guess @game-in-progress)
-    :too-low
+    (< guess (@games-in-progress account))
+    (do (swap! guesses assoc account (inc (@guesses account)))
+        :too-low)
 
-    (> guess @game-in-progress)
-    :too-high))
+    (> guess (@games-in-progress account))
+    (do (swap! guesses assoc account (inc (@guesses account)))
+        :too-high)))
