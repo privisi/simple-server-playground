@@ -13,7 +13,7 @@
 ;;; Finally, let us truly separate concerns between our "application code"
 ;;; and our "http code".  Our game now lives in its own namespace, and
 ;;; is fully testable independent of our "presentation layer". 
-
+ 
 (defn web-content [text]
   (-> text
       (response)
