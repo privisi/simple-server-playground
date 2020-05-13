@@ -27,6 +27,10 @@
                  [ring/ring-mock "0.3.0"]
                  [ring/ring-devel "1.5.0"]
 
+                 [org.clojure/core.async "0.5.527"]
+                 [org.clojure/clojurescript "1.10.520"]
+
+
                  [com.amazonaws/aws-java-sdk-dynamodb "1.11.659"]
                  [amazonica "0.3.150" :exclusions [com.amazonaws/aws-java-sdk
                                                    com.amazonaws/amazon-kinesis-client
