@@ -75,14 +75,18 @@
 ;; ad-hoc queries.
 
 
-
 (dynamo/put-item cred
                  :table-name "battle-royale"
                  :item {:address "Unit 8929 Box 5827\nDPO AE 25338", :birthdate "1832-12-28",
                         :sk "#METADATA#alain01",
                         :pk "USER#alain01",
                         :name "Alain Picard",
-                        :email "kimberlyduncan@yahoo.com", :username "alain"})
+                        :email "kimberlyduncan@yahoo.com", :username "alain"
+                        :a-set #{1 2 3}
+                        :a-map {:quux "foo" ::bar "The Basement"}
+                        :nested {::quux #{1 2 3}
+                                 :high-score 77
+                                 :date (str (java.util.Date.))}})
 
 (dynamo/get-item cred
                  :table-name "battle-royale"
