@@ -11,6 +11,7 @@
             [ring.mock.request :as mock]
             [simple-server.simple-game :as game]))
 
+
 ;;; Finally, let us truly separate concerns between our "application code"
 ;;; and our "http code".  Our game now lives in its own namespace, and
 ;;; is fully testable independent of our "presentation layer".
@@ -56,15 +57,15 @@
 
 
 ;; Now rewrite our game handlers to show some html:
-(defn new-game-handler-html []
-  (when (game/new-game!)
+(defn new-game-handler-html [username]
+  (when (game/new-game! username)
     (response
      (html
       [:body
        [:h1 "Welcome to the guessing game!"]
        [:p "OK- start guessing " [:a {:href "/guess.html"} "here"]]]))))
 
-(defn guess-handler-html [guess]
+(defn guess-handler-html [guess username]
   (let [form [:div
               [:h1 "Enter your guess"]
               [:form {:method :post}
@@ -73,16 +74,16 @@
     (response
      (html
       [:body
-       (condp = (game/guess-answer guess)
+       (condp = (game/guess-answer guess username)
          nil        form
          :game-over [:h2 "You won!"]
          :too-low   [:div [:h2 "Too low."] form]
          :too-high  [:div [:h2 "Too high."] form])]))))
 
 (defroutes html-game-routes
-  (GET "/new-game.html" [] (new-game-handler-html))
-  (GET "/guess.html"    [] (guess-handler-html nil))
-  (POST "/guess.html"   [guess] (guess-handler-html guess)))
+  (GET "/new-game.html" {username :username} (new-game-handler-html username))
+  (GET "/guess.html"    {username :username} (guess-handler-html nil username))
+  (POST "/guess.html"   [guess :as req] (guess-handler-html guess (:username req))))
 
 ;; We want all the game playing URLS (i.e. the html-game-routes) to
 ;; be protected against unauthorized use.
@@ -90,9 +91,10 @@
 
 (defn ensure-auth-cookie [handler]
   (fn [request]
-    (if (get-in request [:cookies "auth"]) ; We don't care about the value, just its presence
-      (handler request)
-      {:status  403 ; Unauthorized.
+    (if-let [cookie (get-in request [:cookies "auth"])] ; We don't care about the value, just its presence
+      (handler (-> request
+                   (assoc :username (:value cookie))))
+      {:status  403                     ; Unauthorized.
        :headers {"Content-Type" "text/html"}
        :body    (html
                  [:body
