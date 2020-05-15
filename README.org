@@ -8,32 +8,7 @@ an HTTP api service in clojure.
 Start the server using: lein repl
 
 Go to http://localhost:3001 to access the home page and confirm the server is working.
-It should display:
-    Welcome to the home page
-    Refer to the README to get started
+
+From there the page will prompt you to create an account and subsequently play the game.
+
 If it doesn't connect, clearing your cache may help.
-
-* Guessing Game
-
-To get started with the guessing game you must first create an account.
-
-Add  /login?name=XXXX  to the end of the URL and replace XXXX with the desired name
-
-Multiple sessions are simultaneously possible if there are multiple accounts logged in.
-
-Succesfully logging in should redirect you to your user home page at /XXXX where it should display:
-    Welcome XXXX. You are logged in!
-    To start a new game: /XXXX/new-game
-
-Replace the end of the URL with  /XXXX/new-game  in order to start a new game, it should display:
-    OK- start guessing at XXXX/guess?guess=N
-
-Replace the end of the URL with  XXXX/guess?guess=N  and replace N with a number between 1 - 10
-Entering this should succesfully input a guess and return you with the result:
-
-Too High: The guessed number is too high
-Too Low: The guessed number is too Low
-Win Screen: When you guess the correct number
-Lose Screen: When you fail to guess the number 5 times
-
-Winning or Losing will automatically restart the game with a new number

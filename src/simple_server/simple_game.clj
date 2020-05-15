@@ -1,33 +1,50 @@
-(ns simple-server.simple-game)
+(ns simple-server.simple-game
+  (:require [simple-server.database :as db]))
 
+(defn user-exists?
+  "Returns if the USER exists in the database"
+  [user]
+  (db/make-get-request user :pk))
 
-(def games-in-progress (atom {}))
-(def guesses (atom {}))
+(defn lookup-target
+  "Returns the target value for USER"
+  [user]
+  (db/make-get-request user :target))
 
-(defn new-game! [account]
-  ;; Make our new game:
-  (swap! games-in-progress assoc account (+ 1 (rand-int 10)))
-  (swap! guesses assoc account 0)
+(defn lookup-attempts
+  "Returns how many attempts the USER has made"
+  [user]
+  (db/make-get-request user :attempts))
+
+(defn new-game!
+  "Creates a new game in the database.
+   If the user exists, update the corresponding fields,
+   Otherwise create a new item in the database"
+  [user]
+  (if (user-exists? user)
+    (do
+      (db/make-update-request user "target" (+ 1 (rand-int 10)))
+      (db/make-update-request user "attempts" 0))
+    (db/make-put-request user (+ 1 (rand-int 10))))
   :ok)
 
-(defn guess-answer [account guess]
+(defn guess-answer
+  "Returns the result of the GUESS made by the USER"
+  [guess user]
   (cond
     (nil? guess) nil
 
-    (= guess (@games-in-progress account))
-    (do (swap! games-in-progress assoc account (+ 1 (rand-int 10)))
-        (swap! guesses assoc account 0)
-        :win)
-    
-    (>= (@guesses account) 4)
-    (do (swap! games-in-progress assoc account (+ 1 (rand-int 10)))
-        (swap! guesses assoc account 0)
+    (= guess (lookup-target user))
+    :game-over
+
+    (>= (lookup-attempts user) 4)
+    (do (db/make-update-request user "attempts" 5)
         :lose)
 
-    (< guess (@games-in-progress account))
-    (do (swap! guesses assoc account (inc (@guesses account)))
+    (< guess (lookup-target user))
+    (do (db/make-update-request user "attempts" (inc (lookup-attempts user)))
         :too-low)
 
-    (> guess (@games-in-progress account))
-    (do (swap! guesses assoc account (inc (@guesses account)))
+    (> guess (lookup-target user))
+    (do (db/make-update-request user "attempts" (inc (lookup-attempts user)))
         :too-high)))

@@ -2,82 +2,116 @@
   (:require [clojure.pprint]
             [ring.adapter.jetty :refer [run-jetty]]
 
-            [ring.util.response :refer [response content-type created redirect not-found status]]
+            [ring.util.response :refer [response content-type set-cookie redirect not-found status]]
             [compojure.core :refer [GET POST ANY defroutes]]
             [compojure.coercions :refer [as-int]]
             [ring.middleware.defaults :as middleware]
 
             [ring.mock.request :as mock]
-            [simple-server.simple-game :as game]))
+            [hiccup.core :refer [html]]
+            
+            [simple-server.simple-game :as game]
+            [simple-server.database :as db]))
 
-(def active-logins (atom #{}))
+;; Initialize the database
+(db/initalize-db)
 
-(defn web-content
-  "Returns a handler for web page display"
-  [text]
-  (-> text
-      (response)
-      (content-type "text/plain")))
+(defn login-handler-html
+  "Returns a login form"
+  []
+  (response
+   (html
+    [:body
+     [:form {:method :post}
+      [:h1 "Enter your username"]
+      [:input {:type :text :name :username}]]])))
 
-(defn logged-in?
-  "Returns if ACCOUNT is logged in (exists)"
-  [account]
-  (some #{account} @active-logins))
+(defn successful-login-handler-html
+  "Redirects the user to guess.html if there is a valid existing game,
+   Otherwise redirects the user to create a new game"
+  [username]
+  (if (and (game/user-exists? username)
+           (>= 4 (game/lookup-attempts username)))
+    (-> (redirect "/guess.html")
+        (set-cookie "auth" username))
 
-(defn new-game-handler 
-  "Starts a new game on ACCOUNT"
-  [account]
-  (if (logged-in? account)
-    (when (game/new-game! account)
-      (web-content (str "OK- start guessing at /" account "/guess?guess=N")))
-    (-> (web-content (str "Account " account " does not exist!\nPlease login at /login?name=NAME"))
-        (status 400))))
+    (-> (redirect "/new-game.html")
+        (set-cookie "auth" username))))
 
-(defn guess-handler 
-  "Returns the outcome of the GUESS for ACCOUNT"
-  [account guess]
-  (if (logged-in? account)
-    (condp = (game/guess-answer account guess)
-      nil       (-> (web-content  "You need to supply a guess with /guess?guess=N")
-                    (status 400))
-      :win (web-content  "Congratulations! You win!")
-      :too-low   (web-content (str "Too low. " (- 5 (@game/guesses account)) " guesses left."))
-      :too-high  (web-content  (str "Too High. " (- 5 (@game/guesses account)) " guesses left."))
-      :lose (web-content "Too many guesses, try again"))
-    (-> (web-content (str "Account " account " does not exist!\nPlease login at /login?name=NAME"))
-        (status 400))))
+(defn new-game-handler-html
+  "Returns the starting game form"
+  [username]
+  (when (game/new-game! username)
+    (response
+     (html
+      [:body
+       [:h1 "Welcome to the guessing game!"]
+       [:p "OK- start guessing " [:a {:href "/guess.html"} "here"]]]))))
 
-(defn login-handler
-  "Adds player-name to active-logins and redirects to accounts home screen after login"
-  [player-name]
-  (swap! active-logins conj player-name)
-  (redirect (str "/" player-name)))
-
-(defn account-handler 
-  "Returns the home page of ACCOUNT if logged in.
-   Otherwise returns a 404 not found"
-  [account]
-  (if (logged-in? account)
-    (web-content (str "Welcome " account ". You are logged in!\n"
-                      "To start a new game: /" account "/new-game"))
-    (not-found "Sorry, No such URI on this server!")))
+(defn guess-handler-html
+  "Returns a form containing the result of the guess made by the user"
+  [guess username]
+  (let [form [:div
+              [:h1 "Enter your guess"]
+              [:form {:method :post}
+               [:input {:type :text :name :guess}]]]
+        guess (as-int guess)]
+    (response
+     (html
+      [:body
+       (condp = (game/guess-answer guess username)
+         nil        form
+         :game-over [:div [:h2 "You won!"]
+                     [:p "Start a new game " [:a {:href "/new-game.html"} "here"]]]
+         :lose      [:div [:p "Out of attempts! Start again "
+                           [:a {:href "/new-game.html"} "here"]]]
+         :too-low   [:div [:h2 "Too low."]
+                     [:p (str (- 5 (game/lookup-attempts username)) " attempts left")]
+                     form]
+         :too-high  [:div [:h2 "Too high."]
+                     [:p (str (- 5 (game/lookup-attempts username)) " attempts left")]
+                     form])]))))
 
 (defn home-page-handler
   "Returns the home page"
   []
-  (web-content "Welcome to the home page\nRefer to the README to get started"))
+  (response "Welcome to the home page\nRefer to the README to get started"))
+
+(defn ensure-auth-cookie
+  "Ensures that the username cookie is available in all subsequent requests.
+   If there is no username cookie then return a form requesting the user to login"
+  [handler]
+  (fn [request]
+    (if-let [cookie (get-in request [:cookies "auth"])] ; We don't care about the value, just its presence
+      (handler (-> request
+                   (assoc :username (:value cookie))))
+      {:status  403                     ; Unauthorized.
+       :headers {"Content-Type" "text/html"}
+       :body    (html
+                 [:body
+                  [:h1 "You must login first."]
+                  [:a {:href "/login.html"}  "Login here."]])})))
+
+(defroutes login-routes
+  (GET "/login.html"  []         (login-handler-html))
+  (POST "/login.html" [username] (successful-login-handler-html username)))
 
 (defroutes game-routes
-  (GET "/login"    [name]             (login-handler name))
-  (GET "/:account/new-game" [account] (new-game-handler account))
-  (GET "/:account/guess"    [account guess :<< as-int] (guess-handler account guess))
-  (GET "/:account" [account]          (account-handler account))
-  (GET "/" []                        (home-page-handler))
-  (GET "*"         []                 (not-found "Sorry, No such URI on this server!")))
+  (GET "/new-game.html" {username :username} (new-game-handler-html username))
+  (GET "/guess.html"    {username :username} (guess-handler-html nil username))
+  (POST "/guess.html" [guess :as req]        (guess-handler-html guess (:username req))))
 
-(def handler
+(defroutes html-routes
+  login-routes
   (-> game-routes
-      (middleware/wrap-defaults middleware/api-defaults)))
+      (ensure-auth-cookie)))
+
+(def localhost-defaults (dissoc middleware/site-defaults :security))
+
+(defroutes handler
+  (-> html-routes
+      (middleware/wrap-defaults localhost-defaults))
+  (ANY "*"         []                (not-found "Sorry, No such URI on this server!")))
 
   ;; (handler (mock/request :get "/new-game"))
   ;; (handler (mock/request :get "/guess?guess=2"))
