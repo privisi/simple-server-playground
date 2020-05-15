@@ -1,23 +1,32 @@
 (ns simple-server.simple-game)
 
 
-(def game-in-progress (atom nil))
+(def games-in-progress (atom {}))
 
-(defn new-game! []
+;; Imagine this:
+(defn make-new-game []
+  {:attempts 0
+   :target (+ 1 (rand-int 10))})
+
+(defn lookup-target [user]
+  (:target (@games-in-progress user)))
+
+(defn new-game! [user]
   ;; Make our new game:
-  (reset! game-in-progress (+ 1 (rand-int 10)))
+  (swap! games-in-progress assoc user (make-new-game))
   :ok)
 
-(defn guess-answer [guess]
+(defn guess-answer [guess user]
   (cond
     (nil? guess) nil
 
-    (= guess @game-in-progress)
-    (and (reset! game-in-progress (+ 1 (rand-int 10)))
+    (= guess (lookup-target user))
+    (and (swap! games-in-progress dissoc user)
          :game-over)
 
-    (< guess @game-in-progress)
+    (< guess (lookup-target user))
     :too-low
 
-    (> guess @game-in-progress)
+    (> guess (lookup-target user))
     :too-high))
+
