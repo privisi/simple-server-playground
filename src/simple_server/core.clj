@@ -14,24 +14,19 @@
 
 ;;; Finally, let us truly separate concerns between our "application code"
 ;;; and our "http code".  Our game now lives in its own namespace, and
-;;; is fully testable independent of our "presentation layer". 
-
-(defn web-content [text]
-  (-> text
-      (response)
-      (content-type "text/plain")))
+;;; is fully testable independent of our "presentation layer".
 
 (defn new-game-handler []
   (when (game/new-game!)
-    (web-content "OK- start guessing at /guess")))
+    (response "OK- start guessing at /guess")))
 
 (defn guess-handler [guess]
   (condp = (game/guess-answer guess)
-    nil       (-> (web-content  "You need to supply a guess with /guess?guess=N")
+    nil       (-> (response  "You need to supply a guess with /guess?guess=N")
                   (status 400))
-    :game-over (web-content  "Congratulations! You win!")
-    :too-low   (web-content "Too low.")
-    :too-high  (web-content  "Too high.")))
+    :game-over (response  "Congratulations! You win!")
+    :too-low   (response "Too low.")
+    :too-high  (response  "Too high.")))
 
 (defroutes game-routes
   (GET "/new-game" []                 (new-game-handler))
@@ -144,7 +139,3 @@
   (run-jetty #'handler {:port 3001 :join? false}))
 
 :core
-
-
-
-
